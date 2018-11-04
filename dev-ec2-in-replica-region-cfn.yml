@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  VpcName:
+    Type: String
+  efsdnsname: 
+    Type: String
+  DevAmi:
+    Type: String
+  InstanceType:
+    Type: String
+  rdsmaster:
+    Type: String
+  rdsreadreplica:
+    Type: String
+  dbname:
+    Type: String
+  dbmasterusername:
+    Type: String
+  dbmasterpassword:
+    Type: String    
+  KeyName:
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+Resources:
+  EC2InstanceRole: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies: 
+        - 
+          PolicyName: "EC2FullAccess"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - 
+                Effect: "Allow"
+                Action: "*"
+                Resource: "*"
+  EC2InstanceProfile: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Path: "/"
+      Roles: 
+        - 
+          Ref: "EC2InstanceRole"
+  WordPressDevServer:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+    Properties:
+      ImageId: 
+        Ref: DevAmi
+      InstanceType:
+        Ref: InstanceType
+      IamInstanceProfile:
+        Ref: EC2InstanceProfile  
+      KeyName:
+        Ref: KeyName
+      SubnetId: {'Fn::ImportValue': !Sub '${VpcName}-public-a'}     
+      SecurityGroupIds: [{'Fn::ImportValue': !Sub '${VpcName}-sg-alltraffic'}]
+      UserData:
+        Fn::Base64: !Sub |
+           #!/bin/bash -xe
+                cd /var/www/html/blogs/
+                sudo rm -rf wp-config.php
+                sudo wget https://s3.amazonaws.com/labs.thecloudgarage.com/megalab/730aug2018/wp-config.php
+                sudo sed -i "s/'dbname'/'${dbname}'/g" /var/www/html/blogs/wp-config.php
+                sudo sed -i "s/'dbmasterusername'/'${dbmasterusername}'/g" /var/www/html/blogs/wp-config.php
+                sudo sed -i "s/'dbmasterpassword'/'${dbmasterpassword}'/g" /var/www/html/blogs/wp-config.php
+                sudo sed -i "s/'northvirginia_rds_master_slave'/'${rdsmaster}'/g" /var/www/html/blogs/wp-config.php
+                sudo sed -i "s/'northvirginia_rds_readreplica'/'${rdsreadreplica}'/g" /var/www/html/blogs/wp-config.php
+                sudo sed '$d' /etc/fstab
+                sudo echo "${efsdnsname}:/    /var/www/html/blogs/wp-content/uploads/ nfs4    nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,_netdev,noresvport 0   0" >> /etc/fstab
+                sudo mount -a
+                sudo chmod -R 755 /var/www/html/
+                sudo chown -R apache.apache /var/www/html/
+                sudo chmod -R 755 /var/www/html/blogs/wp-content/uploads/
+                sudo chmod -R apache.apache /var/www/html/blogs/wp-content/uploads/
+      Tags:
+      - Key: Name
+        Value: !Sub '${VpcName}-wp-dev'
