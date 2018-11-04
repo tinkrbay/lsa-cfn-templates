@@ -1,0 +1,41 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create Elastic File System v20161029-1200
+Parameters:
+    VpcName: 
+      Type: "String"
+    AppName: 
+      Type: "String"      
+Resources:
+  ElasticFileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      FileSystemTags:
+      - Key: Name
+        Value: !Sub "${VpcName}-efs-wp"
+      PerformanceMode: generalPurpose
+  MountTarget1:
+    Type: AWS::EFS::MountTarget
+    DependsOn:
+    - ElasticFileSystem
+    Properties:
+      FileSystemId: !Ref ElasticFileSystem
+      SubnetId: {'Fn::ImportValue': !Sub '${VpcName}-public-a'}
+      SecurityGroups: [{'Fn::ImportValue': !Sub '${VpcName}-sg-alltraffic'}]
+  MountTarget2:
+    Type: AWS::EFS::MountTarget
+    DependsOn:
+    - ElasticFileSystem
+    Properties:
+      FileSystemId: !Ref ElasticFileSystem
+      SubnetId: {'Fn::ImportValue': !Sub '${VpcName}-public-b'}
+      SecurityGroups: [{'Fn::ImportValue': !Sub '${VpcName}-sg-alltraffic'}]
+Outputs:
+  ElasticFileSystem:
+    Value: !Ref ElasticFileSystem
+  ElasticFileSystemDnsNameMount:
+    Description: DNS name for the Amazon EFS file system.
+    Value: !Sub "${ElasticFileSystem}.efs.${AWS::Region}.amazonaws.com"
+    Export:
+      Name:
+        !Sub "${VpcName}-efs-wp-mount"
